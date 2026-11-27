@@ -527,8 +527,8 @@ impl App {
         let (th, st) = (self.th, self.st);
         let (lx, ly) = (self.cv.x(70.0) as i32, self.cv.y(56.0) as i32);
         self.cv.image_px(&self.art.logo, lx, ly, 1.0);
-        self.fonts.draw_shadow(&mut self.cv, Face::Dela, 40.0, 150.0, 88.0, Align::Left, th.paper, th.red, 3.0, "Furr");
-        let w = self.fonts.width(&self.cv, Face::Dela, 40.0, "Furr");
+        self.fonts.draw_shadow(&mut self.cv, Face::Dela, 40.0, 150.0, 88.0, Align::Left, th.paper, th.red, 3.0, "Pur");
+        let w = self.fonts.width(&self.cv, Face::Dela, 40.0, "Pur");
         self.fonts.draw_shadow(&mut self.cv, Face::Dela, 40.0, 150.0 + w, 88.0, Align::Left, th.red, th.paper, 3.0, "OS");
         let crumb = match self.screen { Screen::Snapshots => Some(st.snapshots), Screen::Kernels => Some(st.other_kernel), Screen::Main => None };
         if let Some(c) = crumb {

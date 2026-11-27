@@ -41,7 +41,7 @@ jobs:
       - name: Build PurOS ISO inside official Arch Linux container (ext4 workdir)
         env:
           ISO_NAME_INPUT: ${{ inputs.iso_name || 'puros' }}
-          FURRBOOT_INPUT: ${{ inputs.build_furrboot == false && '0' || '1' }}
+          FURRBOOT_INPUT: ${{ (github.event_name == 'workflow_dispatch' && inputs.build_furrboot == false) && '0' || '1' }}
         run: |
           sudo mkdir -p /tmp/puros-work "${GITHUB_WORKSPACE}/out"
           docker run --rm --privileged \
@@ -66,7 +66,9 @@ jobs:
       - name: Prepare release parts for PurOS-Downloader.exe (< 2 GiB per part)
         run: |
           mkdir -p "${GITHUB_WORKSPACE}/release-assets"
-          [[ -f "${GITHUB_WORKSPACE}/PurOS-Downloader.exe" ]] && cp -f "${GITHUB_WORKSPACE}/PurOS-Downloader.exe" "${GITHUB_WORKSPACE}/release-assets/"
+          if [[ -f "${GITHUB_WORKSPACE}/PurOS-Downloader.exe" ]]; then
+            cp -f "${GITHUB_WORKSPACE}/PurOS-Downloader.exe" "${GITHUB_WORKSPACE}/release-assets/"
+          fi
           cd "${GITHUB_WORKSPACE}/out"
           for iso in *.iso; do
             cp -f "${iso}.sha256" "${GITHUB_WORKSPACE}/release-assets/"

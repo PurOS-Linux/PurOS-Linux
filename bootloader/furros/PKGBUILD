@@ -3,9 +3,9 @@
 pkgname=furrboot
 pkgver=0.2.0
 pkgrel=7
-pkgdesc="FurrBoot: the FurrOS boot menu (UEFI; Limine in FurrOS colours on BIOS) and the tools that keep it up to date"
+pkgdesc="FurrBoot: the PurOS boot menu (UEFI; Limine in PurOS colours on BIOS) and the tools that keep it up to date"
 arch=(x86_64)
-url="https://furros.xyz"
+url="https://github.com/PurOS-Linux/PurOS-Linux"
 license=(GPL-3.0-or-later)  # btrfs_x64.efi: efifs 1.13, GPL-3.0 (https://github.com/pbatard/efifs)
 depends=(bash efibootmgr systemd coreutils util-linux)
 optdepends=('snapper: snapshots in the boot menu' 'btrfs-progs: snapshots in the boot menu'

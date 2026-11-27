@@ -107,7 +107,7 @@ if [[ $BUILD_AUR_WALLS == 1 ]]; then
             BDIR=/var/tmp/furros-aur-$aur_pkg
             rm -rf "$BDIR"
             if sudo -H -u builder git clone --depth 1 "https://aur.archlinux.org/${aur_pkg}.git" "$BDIR"; then
-                (cd "$BDIR" && sudo -H -u builder makepkg -s --noconfirm) && cp -f "$BDIR"/*.pkg.tar.zst "$AUR_CACHE/" || log "  WARN: $aur_pkg build skipped"
+                (cd "$BDIR" && sudo -H -u builder makepkg -s --noconfirm) && { rm -f "$BDIR"/*-debug-*.pkg.tar.zst; cp -f "$BDIR"/*.pkg.tar.zst "$AUR_CACHE/"; } || log "  WARN: $aur_pkg build skipped"
             fi
             rm -rf "$BDIR"
         fi
@@ -193,42 +193,46 @@ P=$PROFILE/profiledef.sh
 sed -i "s/^iso_name=.*/iso_name=\"${ISO_NAME}\"/; s/^iso_publisher=.*/iso_publisher=\"Custom Furry OS\"/;
         s/^iso_application=.*/iso_application=\"PurOS Live\"/; s/^iso_version=.*/iso_version=\"1.0\"/;
         s/^iso_label=.*/iso_label=\"FURROS_10\"/" "$P"
-cat >> "$P" <<'EOF'
-file_permissions+=(
-  ["/usr/local/bin/furros-brand"]="0:0:755"
-  ["/usr/local/bin/furros-firstrun"]="0:0:755"
-  ["/usr/local/bin/furros-wallpaper"]="0:0:755"
-  ["/usr/local/bin/furros-dde-wm-guard"]="0:0:755"
-  ["/usr/local/bin/furros-set-wallpaper"]="0:0:755"
-  ["/usr/local/bin/furros-wallpapers-app"]="0:0:755"
-  ["/usr/local/bin/furros-pacman-hint"]="0:0:755"
-  ["/usr/local/bin/furros-hypr-lua"]="0:0:755"
-  ["/usr/lib/furros/wallpapers/furros_wallpapers.py"]="0:0:755"
-  ["/usr/local/bin/furros-liveuser"]="0:0:755"
-  ["/usr/local/bin/furros-installer"]="0:0:755"
-  ["/usr/local/bin/furros-labwc-fix"]="0:0:755"
-  ["/usr/local/bin/furros-academy"]="0:0:755"
-  ["/usr/local/bin/furros-welcome"]="0:0:755"
-  ["/usr/local/bin/furros-about"]="0:0:755"
-  ["/usr/local/bin/furros-lapa"]="0:0:755"
-  ["/usr/lib/furros/academy/furros_about.py"]="0:0:755"
-  ["/usr/lib/furros/academy/furros_lapa.py"]="0:0:755"
-  ["/etc/grub.d/11_furros_safe_graphics"]="0:0:755"
-  ["/etc/grub.d/45_furros_power"]="0:0:755"
-  ["/usr/lib/furros/academy/furros_welcome.py"]="0:0:755"
-  ["/usr/local/bin/furros-drivers"]="0:0:755"
-  ["/usr/local/bin/furros-update"]="0:0:755"
-  ["/usr/local/bin/furros-gpu-soft"]="0:0:755"
-  ["/usr/local/bin/furros-desktop"]="0:0:755"
-  ["/usr/local/bin/furros-picom"]="0:0:755"
-  ["/usr/lib/systemd/user-environment-generators/60-furros-vm-graphics"]="0:0:755"
-  ["/usr/lib/furros/drivers/furros_hw.py"]="0:0:755"
-  ["/usr/lib/furros/installer/backend.py"]="0:0:755"
-  ["/usr/lib/furros/installer/furros_installer.py"]="0:0:755"
-  ["/usr/lib/furros/academy/furros_academy.py"]="0:0:755"
-  ["/usr/share/furros/skel/bspwm/.config/bspwm/bspwmrc"]="0:0:755"
-)
-EOF
+echo 'file_permissions+=(' >> "$P"
+for fp in \
+  /usr/local/bin/furros-brand \
+  /usr/local/bin/furros-firstrun \
+  /usr/local/bin/furros-wallpaper \
+  /usr/local/bin/furros-dde-wm-guard \
+  /usr/local/bin/furros-set-wallpaper \
+  /usr/local/bin/furros-wallpapers-app \
+  /usr/local/bin/furros-pacman-hint \
+  /usr/local/bin/furros-hypr-lua \
+  /usr/lib/furros/wallpapers/furros_wallpapers.py \
+  /usr/local/bin/furros-liveuser \
+  /usr/local/bin/furros-installer \
+  /usr/local/bin/furros-labwc-fix \
+  /usr/local/bin/furros-academy \
+  /usr/local/bin/furros-welcome \
+  /usr/local/bin/furros-about \
+  /usr/local/bin/furros-lapa \
+  /usr/lib/furros/academy/furros_about.py \
+  /usr/lib/furros/academy/furros_lapa.py \
+  /etc/grub.d/11_furros_safe_graphics \
+  /etc/grub.d/45_furros_power \
+  /usr/lib/furros/academy/furros_welcome.py \
+  /usr/local/bin/furros-drivers \
+  /usr/local/bin/furros-update \
+  /usr/local/bin/furros-gpu-soft \
+  /usr/local/bin/furros-desktop \
+  /usr/local/bin/furros-picom \
+  /usr/lib/systemd/user-environment-generators/60-furros-vm-graphics \
+  /usr/lib/furros/drivers/furros_hw.py \
+  /usr/lib/furros/installer/backend.py \
+  /usr/lib/furros/installer/furros_installer.py \
+  /usr/lib/furros/academy/furros_academy.py \
+  /usr/share/furros/skel/bspwm/.config/bspwm/bspwmrc; do
+  if [[ -e "$AIR$fp" ]]; then
+    chmod 755 "$AIR$fp" 2>/dev/null || true
+    printf '  ["%s"]="0:0:755"\n' "$fp" >> "$P"
+  fi
+done
+echo ')' >> "$P"
 
 log "Boot menus"
 for f in $(grep -rl "Arch Linux" "$PROFILE"/efiboot "$PROFILE"/grub "$PROFILE"/syslinux 2>/dev/null || true); do
@@ -346,7 +350,7 @@ for iso in *.iso; do
     fi
     if [[ "$OUT_DIR" != "$WORK/out" ]]; then
         cp -f "$iso" "$iso.sha256" "$OUT_DIR/"
-        [[ -f "$iso.sig" ]] && cp -f "$iso.sig" "$OUT_DIR/"
+        if [[ -f "$iso.sig" ]]; then cp -f "$iso.sig" "$OUT_DIR/"; fi
     fi
 done
 rm -f /etc/sudoers.d/99-furros-builder
