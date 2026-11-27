@@ -1,0 +1,8 @@
+﻿
+out/
+*.iso
+*.iso.part*
+*.sha256
+*.sig
+__pycache__/
+

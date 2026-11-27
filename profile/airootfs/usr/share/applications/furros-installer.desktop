@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Install PurOS
+Name[ru]=Установить PurOS
+Name[pl]=Zainstaluj PurOS
+Name[es]=Instalar PurOS
+Exec=furros-installer
+Icon=furros
+Terminal=false
+Categories=System;
+StartupWMClass=furros-installer

@@ -1,0 +1,16 @@
+[Desktop Entry]
+Type=Application
+Name=Welcome to PurOS
+Name[ru]=Добро пожаловать в PurOS
+Name[pl]=Witaj w PurOS
+Name[es]=Bienvenido a PurOS
+Comment=First steps in PurOS with Pixie
+Comment[ru]=Первые шаги в PurOS с Пикси
+Comment[pl]=Pierwsze kroki w PurOS z Pixie
+Comment[es]=Primeros pasos en PurOS con Pixie
+Exec=furros-welcome --no-school
+Icon=furros
+Terminal=false
+Categories=Education;
+Keywords=welcome;start;furros;pixie;
+StartupWMClass=furros-welcome
