@@ -11,6 +11,10 @@ on:
         description: "Собрать графическое UEFI-меню (Rust)"
         type: boolean
         default: true
+      publish_release_tag:
+        description: "Опубликовать сразу в Releases под тегом (например v1.0-beta.1, пусто = только Artifact)"
+        required: false
+        default: ""
   push:
     tags:
       - "v*"
@@ -25,7 +29,7 @@ jobs:
     timeout-minutes: 120
 
     steps:
-      - name: Free up disk space on GitHub runner (~35 GB extra)
+      - name: Free up disk space on GitHub runner (~55 GB free ext4)
         run: |
           sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
           sudo docker image prune --all --force || true
@@ -34,14 +38,15 @@ jobs:
       - name: Checkout PurOS repository
         uses: actions/checkout@v4
 
-      - name: Build PurOS ISO inside official Arch Linux container
+      - name: Build PurOS ISO inside official Arch Linux container (ext4 workdir)
         env:
           ISO_NAME_INPUT: ${{ inputs.iso_name || 'puros' }}
           FURRBOOT_INPUT: ${{ inputs.build_furrboot == false && '0' || '1' }}
         run: |
-          mkdir -p "${GITHUB_WORKSPACE}/out"
+          sudo mkdir -p /tmp/puros-work "${GITHUB_WORKSPACE}/out"
           docker run --rm --privileged \
             -v "${GITHUB_WORKSPACE}:/src:ro" \
+            -v "/tmp/puros-work:/var/tmp" \
             -v "${GITHUB_WORKSPACE}/out:/out" \
             -e CUSTOM_ISO_NAME="${ISO_NAME_INPUT}" \
             -e BUILD_FURRBOOT="${FURRBOOT_INPUT}" \
@@ -58,34 +63,41 @@ jobs:
             '
           ls -lh "${GITHUB_WORKSPACE}/out"
 
-      - name: Split ISO if larger than 1.95 GiB (for GitHub Releases limit)
+      - name: Prepare release parts for PurOS-Downloader.exe (< 2 GiB per part)
         run: |
+          mkdir -p "${GITHUB_WORKSPACE}/release-assets"
+          [[ -f "${GITHUB_WORKSPACE}/PurOS-Downloader.exe" ]] && cp -f "${GITHUB_WORKSPACE}/PurOS-Downloader.exe" "${GITHUB_WORKSPACE}/release-assets/"
           cd "${GITHUB_WORKSPACE}/out"
           for iso in *.iso; do
+            cp -f "${iso}.sha256" "${GITHUB_WORKSPACE}/release-assets/"
             size=$(stat -c%s "$iso")
-            if (( size > 2090000000 )); then
-              split -b 1950M -d -a 2 "$iso" "${iso}.part"
+            if (( size > 2000000000 )); then
+              split -b 1900M -d -a 2 "$iso" "${GITHUB_WORKSPACE}/release-assets/${iso}.part"
+            else
+              cp -f "$iso" "${GITHUB_WORKSPACE}/release-assets/"
             fi
           done
-          ls -lh
+          ls -lh "${GITHUB_WORKSPACE}/release-assets"
 
       - name: Upload PurOS ISO to Workflow Artifacts
         uses: actions/upload-artifact@v4
         with:
           name: PurOS-ISO
           path: |
-            out/*.iso
-            out/*.iso.part*
-            out/*.sha256
+            release-assets/*
           if-no-files-found: error
           retention-days: 14
 
-      - name: Publish to GitHub Releases (when a v* tag is pushed)
-        if: startsWith(github.ref, 'refs/tags/v')
+      - name: Publish to GitHub Releases (for PurOS-Downloader.exe)
+        if: startsWith(github.ref, 'refs/tags/v') || inputs.publish_release_tag != ''
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ inputs.publish_release_tag || github.ref_name }}
+          name: "PurOS ${{ inputs.publish_release_tag || github.ref_name }}"
+          prerelease: ${{ contains(inputs.publish_release_tag || github.ref_name, 'beta') }}
+          body: |
+            🐾 **PurOS** — независимый дистрибутив на базе Arch Linux (без телеметрии, с LibreWolf, гибернацией 0% разряда для ноутбуков и опциональным сканером отпечатка пальца).
+
+            Проще всего скачать и автоматически склеить готовый `.iso` на Windows (вообще **без WSL**) через **`PurOS-Downloader.exe`**!
           files: |
-            out/*.sha256
-            out/*.iso.part*
-            out/*.iso
-          fail_on_unmatched_files: false
+            release-assets/*

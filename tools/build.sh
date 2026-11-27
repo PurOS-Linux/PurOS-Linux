@@ -42,7 +42,7 @@ while read -r url; do
         cat /tmp/mirrorlist.new > /etc/pacman.d/mirrorlist
     fi
 done < <(sed -n 's/^Server = //p' /etc/pacman.d/mirrorlist)
-grep -q '^Server' /etc/pacman.d/mirrorlist || { echo "no fresh mirror left" >&2; cp /etc/pacman.d/mirrorlist.furros-bak /etc/pacman.d/mirrorlist; exit 1; }
+grep -q '^Server' /etc/pacman.d/mirrorlist || { log "keeping default mirrorlist"; cp /etc/pacman.d/mirrorlist.furros-bak /etc/pacman.d/mirrorlist; }
 pacman -Syy --noconfirm >/dev/null
 
 log "Fresh releng profile"
@@ -105,8 +105,8 @@ if [[ $BUILD_AUR_WALLS == 1 ]]; then
             log "  building $aur_pkg from AUR (cached for next runs)..."
             BDIR=/var/tmp/furros-aur-$aur_pkg
             rm -rf "$BDIR"
-            if sudo -u builder git clone --depth 1 "https://aur.archlinux.org/${aur_pkg}.git" "$BDIR"; then
-                (cd "$BDIR" && sudo -u builder makepkg -s --noconfirm) && cp -f "$BDIR"/*.pkg.tar.zst "$AUR_CACHE/" || log "  WARN: $aur_pkg build skipped"
+            if sudo -H -u builder git clone --depth 1 "https://aur.archlinux.org/${aur_pkg}.git" "$BDIR"; then
+                (cd "$BDIR" && sudo -H -u builder makepkg -s --noconfirm) && cp -f "$BDIR"/*.pkg.tar.zst "$AUR_CACHE/" || log "  WARN: $aur_pkg build skipped"
             fi
             rm -rf "$BDIR"
         fi
@@ -250,11 +250,11 @@ python3 "$SRC/tools/live_safe_entries.py" "$PROFILE" || { log "FAILED: live safe
 if [[ $BUILD_FURRBOOT == 1 && ! -f $SRC/bootloader/furros/furrboot.efi && -f $SRC/bootloader/furrboot/Cargo.toml ]]; then
     log "Compiling FurrBoot UEFI bootloader (Rust)..."
     pacman -S --needed --noconfirm rustup >/dev/null 2>&1 || true
-    sudo -u builder rustup default stable >/dev/null 2>&1 || true
-    sudo -u builder rustup target add x86_64-unknown-uefi >/dev/null 2>&1 || true
+    sudo -H -u builder rustup default stable >/dev/null 2>&1 || true
+    sudo -H -u builder rustup target add x86_64-unknown-uefi >/dev/null 2>&1 || true
     CARGO_TGT=/var/tmp/furros-cargo-target
     mkdir -p "$CARGO_TGT" && chown -R builder: "$CARGO_TGT" "$SRC/bootloader/furrboot"
-    if (cd "$SRC/bootloader/furrboot" && sudo -u builder env CARGO_TARGET_DIR="$CARGO_TGT" cargo build --release --target x86_64-unknown-uefi); then
+    if (cd "$SRC/bootloader/furrboot" && sudo -H -u builder env CARGO_TARGET_DIR="$CARGO_TGT" cargo build --release --target x86_64-unknown-uefi); then
         cp -f "$CARGO_TGT/x86_64-unknown-uefi/release/furrboot.efi" "$SRC/bootloader/furros/furrboot.efi"
     else
         log "WARN: FurrBoot build failed, falling back to systemd-boot / GRUB"

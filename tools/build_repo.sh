@@ -142,7 +142,7 @@ mkpkg furros-branding "PurOS look: themes, boot splash, login screen, fonts, set
 chown -R builder: "$B"
 for d in "$B"/furros-*/; do
     [[ -f $d/PKGBUILD ]] || continue
-    (cd "$d" && sudo -u builder makepkg -f --nodeps --noconfirm >/dev/null)
+    (cd "$d" && sudo -H -u builder makepkg -f --nodeps --noconfirm >/dev/null)
     cp "$d"/*.pkg.tar.zst "$OUT/"
 done
 # FurrBoot (bootloader/furros: PKGBUILD + the prebuilt furrboot.efi, Rust's UEFI target isn't in Arch)
@@ -150,7 +150,7 @@ FB_SRC=$(dirname "$0")/../bootloader/furros
 if [[ -f $FB_SRC/PKGBUILD && -f $FB_SRC/furrboot.efi ]]; then
     rm -rf "$B/furrboot" && cp -r "$FB_SRC" "$B/furrboot" && sed -i 's/\r$//' "$B/furrboot"/furrboot-* "$B/furrboot"/*.hook "$B/furrboot"/PKGBUILD
     chown -R builder: "$B/furrboot"
-    (cd "$B/furrboot" && sudo -u builder makepkg -f --nodeps --noconfirm >/dev/null)
+    (cd "$B/furrboot" && sudo -H -u builder makepkg -f --nodeps --noconfirm >/dev/null)
     cp "$B"/furrboot/furrboot-*.pkg.tar.zst "$OUT/"
 else
     echo "build_repo: no bootloader/furros (FurrBoot): the ISO installs GRUB only" >&2
