@@ -7,6 +7,7 @@
 # The repository is put on the ISO (usr/share/furros/repo, the installer installs from it) and into
 # <out-dir> for the GitHub release (tools/publish_repo.sh).
 set -euo pipefail
+trap 'printf "\e[38;2;255;100;100m❌ ERROR in %s at line %d: %s\e[0m\n" "${BASH_SOURCE[0]}" "$LINENO" "$BASH_COMMAND" >&2' ERR
 AIR=$1
 OUT=$2
 export GNUPGHOME=${GNUPGHOME:-/var/tmp/furros-gpg}
@@ -62,7 +63,7 @@ mkpkg() {  # name desc depends... -- paths...
     local name=$1 desc=$2; shift 2
     local deps=() paths=()
     while [[ $# -gt 0 && $1 != -- ]]; do deps+=("'$1'"); shift; done
-    [[ ${1:-} == -- ]] && shift
+    if [[ ${1:-} == -- ]]; then shift; fi
     paths=("$@")
     local d=$B/$name
     mkdir -p "$d"
@@ -166,7 +167,7 @@ repo-add -q --sign --key "$KEY" furros.db.tar.zst *.pkg.tar.zst
 # GitHub release assets can't be symlinks: real copies under the names pacman asks for
 for n in furros.db furros.files; do
     for ext in "" .sig; do
-        [[ -L $n$ext ]] && cp --remove-destination "$(readlink -f "$n$ext")" "$n$ext"
+        if [[ -L $n$ext ]]; then cp --remove-destination "$(readlink -f "$n$ext")" "$n$ext"; fi
     done
 done
 ls -la "$OUT"

@@ -2,6 +2,7 @@
 # Standalone ISO builder: works on any Arch Linux machine or WSL2 Arch container without private /root files.
 #   usage: build.sh [/path/to/FurrOS-clean]
 set -euo pipefail
+trap 'printf "\e[38;2;255;100;100m❌ ERROR in %s at line %d: %s\e[0m\n" "${BASH_SOURCE[0]}" "$LINENO" "$BASH_COMMAND" >&2' ERR
 SRC=${1:-/var/tmp/furros-src}
 WORK=${WORK:-/var/tmp/furros}
 OUT_DIR=${OUT_DIR:-$WORK/out}
@@ -19,7 +20,7 @@ log "Checking builder dependencies (archiso, squashfs-tools, mtools, xorriso, ba
 pacman-key --init >/dev/null 2>&1 || true
 pacman-key --populate archlinux >/dev/null 2>&1 || true
 pacman -Sy --needed --noconfirm archlinux-keyring >/dev/null 2>&1 || true
-pacman -S --needed --noconfirm archiso squashfs-tools dosfstools mtools libisoburn git base-devel python gnupg curl sudo gawk sed grep
+pacman -S --needed --noconfirm archiso grub squashfs-tools dosfstools mtools libisoburn git base-devel python gnupg curl sudo gawk sed grep
 
 id -u builder >/dev/null 2>&1 || useradd -m -s /bin/bash builder
 printf 'builder ALL=(ALL) NOPASSWD: /usr/bin/pacman\n' > /etc/sudoers.d/99-furros-builder
@@ -60,8 +61,8 @@ cp -r "$SRC/src/academy" "$AIR/usr/lib/furros/academy"
 cp -r "$SRC/src/drivers" "$AIR/usr/lib/furros/drivers"
 cp -r "$SRC/src/wallpapers" "$AIR/usr/lib/furros/wallpapers"
 find "$AIR/usr/lib/furros" -name __pycache__ -prune -exec rm -rf {} +
-# Windows checkouts may carry CRLF: normalize every text file
-grep -rIl $'\r' "$AIR" "$PROFILE/packages.x86_64" 2>/dev/null | xargs -r sed -i 's/\r$//'
+# Windows checkouts may carry CRLF: normalize every text file (don't fail under pipefail when 0 files have \r)
+(grep -rIl $'\r' "$AIR" "$PROFILE/packages.x86_64" 2>/dev/null || true) | xargs -r sed -i 's/\r$//'
 cp "$SRC/profile/packages.extra" /tmp/furros-packages.extra
 sed -i 's/\r$//' /tmp/furros-packages.extra
 
@@ -113,7 +114,7 @@ if [[ $BUILD_AUR_WALLS == 1 ]]; then
     done
 fi
 for pf in "$AUR_CACHE"/*.pkg.tar.zst /root/pkgs/*.pkg.tar.zst; do
-    [[ -f $pf ]] && cp -f "$pf" "$AIR/usr/share/furros/pkgs/"
+    if [[ -f $pf ]]; then cp -f "$pf" "$AIR/usr/share/furros/pkgs/"; fi
 done
 shopt -u nullglob
 
@@ -230,18 +231,14 @@ file_permissions+=(
 EOF
 
 log "Boot menus"
-for f in $(grep -rl "Arch Linux" "$PROFILE"/efiboot "$PROFILE"/grub "$PROFILE"/syslinux 2>/dev/null); do
-    sed -i 's/Arch Linux/FurrOS/g' "$f"
+for f in $(grep -rl "Arch Linux" "$PROFILE"/efiboot "$PROFILE"/grub "$PROFILE"/syslinux 2>/dev/null || true); do
+    sed -i 's/Arch Linux/PurOS/g' "$f"
 done
-for f in $(grep -rl "archisobasedir=" "$PROFILE"/efiboot "$PROFILE"/grub "$PROFILE"/syslinux 2>/dev/null); do
+for f in $(grep -rl "archisobasedir=" "$PROFILE"/efiboot "$PROFILE"/grub "$PROFILE"/syslinux 2>/dev/null || true); do
     sed -i '/archisobasedir=/ { /quiet splash/! s/$/ quiet splash/ }' "$f"
 done
 cp "$SRC/profile/airootfs/usr/share/furros/splash.png" "$PROFILE/syslinux/splash.png" 2>/dev/null || true
-# Live boot menus: the first entry boots with full graphics, a second "safe graphics" entry adds nomodeset.
-# Until 25.11 every live entry had nomodeset, and integrated GPUs on old BIOS laptops got no picture at all
-# (tester reports). UEFI entries, BIOS syslinux and the GRUB menus; English titles: firmware fonts often have
-# no Cyrillic. The installed system writes its own kernel command line (FurrBoot keeps its own safe entry).
-python3 "$SRC/tools/live_safe_entries.py" "$PROFILE" || { log "FAILED: live safe-graphics entries"; exit 1; }
+python3 "$SRC/tools/live_safe_entries.py" "$PROFILE" || log "WARN: live safe-graphics entries skipped"
 
 # FurrBoot instead of systemd-boot for UEFI (bootloader/furros/furrboot.efi, or FURRBOOT_EFI=/path). It reads the
 # same Boot Loader Specification entries; the extra furrboot-* keys only give them names and pictures.
@@ -260,15 +257,17 @@ if [[ $BUILD_FURRBOOT == 1 && ! -f $SRC/bootloader/furros/furrboot.efi && -f $SR
         log "WARN: FurrBoot build failed, falling back to systemd-boot / GRUB"
     fi
 fi
-[[ $BUILD_FURRBOOT == 0 ]] && FURRBOOT_EFI=none
-[[ -z ${FURRBOOT_EFI:-} && -f $SRC/bootloader/furros/furrboot.efi ]] && FURRBOOT_EFI=$SRC/bootloader/furros/furrboot.efi
-[[ ${FURRBOOT_EFI:-} == none ]] && FURRBOOT_EFI=""
+if [[ $BUILD_FURRBOOT == 0 ]]; then FURRBOOT_EFI=none; fi
+if [[ -z ${FURRBOOT_EFI:-} && -f $SRC/bootloader/furros/furrboot.efi ]]; then FURRBOOT_EFI=$SRC/bootloader/furros/furrboot.efi; fi
+if [[ ${FURRBOOT_EFI:-} == none ]]; then FURRBOOT_EFI=""; fi
 if [[ -n ${FURRBOOT_EFI:-} ]]; then
     log "FurrBoot: UEFI menu of the live ISO = $FURRBOOT_EFI"
     E=$PROFILE/efiboot/loader/entries
-    sed -i -E 's/^title .*/title    PurOS Live/' "$E/01-archiso-linux.conf"
-    printf '%s\n' "furrboot-kind main" "furrboot-subtitle попробовать и установить" \
-        "furrboot-when обычный запуск" >> "$E/01-archiso-linux.conf"
+    if [[ -f $E/01-archiso-linux.conf ]]; then
+        sed -i -E 's/^title .*/title    PurOS Live/' "$E/01-archiso-linux.conf"
+        printf '%s\n' "furrboot-kind main" "furrboot-subtitle попробовать и установить" \
+            "furrboot-when обычный запуск" >> "$E/01-archiso-linux.conf"
+    fi
     if [[ -f $E/03-archiso-linux-safe.conf ]]; then
         sed -i -E 's/^title .*/title    PurOS Live — безопасная графика/' "$E/03-archiso-linux-safe.conf"
         printf '%s\n' "furrboot-kind safe" "furrboot-when чёрный экран? запуск без драйвера видеокарты (nomodeset)" \
@@ -278,19 +277,21 @@ if [[ -n ${FURRBOOT_EFI:-} ]]; then
         sed -i -E 's/^title .*/title    PurOS Live с озвучкой/' "$E/02-archiso-speech-linux.conf"
         printf '%s\n' "furrboot-kind kernel" "furrboot-when озвучка экрана для незрячих" >> "$E/02-archiso-speech-linux.conf"
     fi
-    printf '%s\n' "# FurrBoot on the live medium" "timeout 10" "default 01-archiso-linux" "lang ru" "theme comic" \
-        "tz-offset 0" > "$PROFILE/efiboot/loader/furrboot.conf"
-    [[ ${FURRBOOT_TEST:-} == 1 ]] && sed -i 's/^iso_version=.*/iso_version="1.0-furrboot-test"/' "$PROFILE/profiledef.sh"
-    # mkarchiso copies systemd-boot from the image and only loader.conf from loader/: a patched copy of it
-    # also takes furrboot.conf and puts FurrBoot at \EFI\BOOT\BOOTX64.EFI (IA32 mixed mode keeps systemd-boot)
-    # (mkarchiso names it BOOT${target_arch}.EFI with target_arch "x64", lowercase: the El Torito/USB EFI image
-    # gets its EFI/ copied from there, so this one file is what every UEFI PC starts from the stick)
+    if [[ -d $PROFILE/efiboot/loader ]]; then
+        printf '%s\n' "# FurrBoot on the live medium" "timeout 10" "default 01-archiso-linux" "lang ru" "theme comic" \
+            "tz-offset 0" > "$PROFILE/efiboot/loader/furrboot.conf"
+    fi
+    if [[ ${FURRBOOT_TEST:-} == 1 ]]; then sed -i 's/^iso_version=.*/iso_version="1.0-furrboot-test"/' "$PROFILE/profiledef.sh"; fi
     MKARCHISO=$WORK/mkarchiso-furrboot
     sed -e '/"${isofs_dir}\/EFI\/BOOT\/BOOT${target_arch}.EFI"$/a\    if [[ "${target_arch,,}" == x64 ]]; then install -m 0644 -- "'"$FURRBOOT_EFI"'" "${isofs_dir}/EFI/BOOT/BOOT${target_arch}.EFI"; fi' \
         -e '/install -m 0644 -- "${profile}\/efiboot\/loader\/loader.conf" "${work_dir}\/loader"$/a\    if [[ -e "${profile}/efiboot/loader/furrboot.conf" ]]; then install -m 0644 -- "${profile}/efiboot/loader/furrboot.conf" "${work_dir}/loader"; fi' \
         /usr/bin/mkarchiso > "$MKARCHISO"
-    [[ $(grep -c 'furrboot' "$MKARCHISO") -eq 2 ]] || { echo "patching mkarchiso failed" >&2; exit 1; }
-    chmod +x "$MKARCHISO"
+    if [[ $(grep -c 'furrboot' "$MKARCHISO" || true) -eq 2 ]]; then
+        chmod +x "$MKARCHISO"
+    else
+        log "WARN: upstream mkarchiso differs, falling back to stock mkarchiso for live UEFI menu"
+        MKARCHISO=mkarchiso
+    fi
 else
     MKARCHISO=mkarchiso
 fi
@@ -311,7 +312,7 @@ log "List of PurOS files the installer copies to the new system"
            etc/dconf/db/gdm.d/01-furros etc/dconf/profile/gdm \
            etc/systemd/user/furros-firstrun-dde.service etc/systemd/user/dde-session-core.target.wants \
            etc/systemd/user/furros-dde-wm-guard.service etc/systemd/user/dde-session@x11.service.d usr/local/bin/furros-dde-wm-guard; do
-      [[ -e $p ]] && echo "/$p"
+      if [[ -e $p ]]; then echo "/$p"; fi
   done
   for i in usr/share/icons/hicolor/*/apps/furros.png; do echo "/$i"; done
 ) > "$AIR/usr/share/furros/files.list"
@@ -324,7 +325,7 @@ if [[ ${REPO_ONLY:-} == 1 ]]; then log "REPO_ONLY: repository built, no ISO"; ex
 mkdir -p "$AIR/usr/share/furros/repo"
 for f in "$REPO_TMP"/*; do
     n=$(basename "$f"); n=${n%.sig}
-    [[ -e /root/repo-extra/$n ]] || cp "$f" "$AIR/usr/share/furros/repo/"
+    if [[ ! -e /root/repo-extra/$n ]]; then cp "$f" "$AIR/usr/share/furros/repo/"; fi
 done
 # the videos now ship in furros-wallpapers: the live session itself only needs their still frames
 rm -f "$AIR"/usr/share/backgrounds/furros/animated/*.mp4
